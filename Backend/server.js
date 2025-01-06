@@ -73,6 +73,156 @@ app.get("/", async (req, res) => {
 	res.send("Server is running");
 });
 
+app.post("/api/book", async (req, res) => {
+	const {
+		name,
+		phone_number,
+		email_id,
+		day,
+		start_time,
+		pickup_location,
+		destination,
+	} = req.body;
+
+	const travelDurationInMinutes = await getTravelDurationInMinutes(
+		pickup_location,
+		destination,
+		googleMapsApiKey
+	);
+
+	const startTime = new Date(`${day}T${start_time}`); // Create Date object from string
+
+	// Format startTime into 'YYYY-MM-DD HH:MM:SS' format
+	const startTimeFormatted = startTime
+		.toISOString()
+		.slice(0, 19)
+		.replace("T", " ");
+
+	// Calculate end time (adding travel duration in minutes)
+	const endTime = new Date(
+		startTime.getTime() + travelDurationInMinutes * 60000
+	);
+
+	// Format endTime into 'YYYY-MM-DD HH:MM:SS' format
+	const endTimeFormatted = endTime.toISOString().slice(0, 19).replace("T", " ");
+
+	// Generate a 4-digit random number for booking_ref
+	const bookingRef = `${Math.floor(Date.now() / 1000) % 10000}${Math.floor(
+		Math.random() * 1000
+	)}`; // Random number with timestamp
+
+	try {
+		const db = await pool.connect();
+
+		// // Save user data in the `Users` table
+		// const user = await db.query(
+		//   'INSERT INTO "Users" (name, phone_number, email_id) VALUES ($1, $2, $3) RETURNING *',
+		//   [name, phone_number, email_id]
+		// );
+
+		// const userId = user.rows[0].user_id;
+
+		let user = await db.query('SELECT * FROM "Users" WHERE email_id = $1', [
+			email_id,
+		]);
+
+		let userId;
+
+		if (user.rows.length > 0) {
+			// If the user exists, use the existing user_id
+			userId = user.rows[0].user_id;
+		} else {
+			// If the user doesn't exist, create a new user
+			user = await db.query(
+				'INSERT INTO "Users" (name, phone_number, email_id) VALUES ($1, $2, $3) RETURNING *',
+				[name, phone_number, email_id]
+			);
+			userId = user.rows[0].user_id;
+		}
+
+		// Save booking data in the `Bookings` table
+		const booking = await db.query(
+			'INSERT INTO "Bookings" (user_id, day, start_time, end_time, pickup_location, destination, status, booking_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+			[
+				userId,
+				day,
+				startTimeFormatted,
+				endTimeFormatted,
+				pickup_location,
+				destination,
+				"confirmed",
+				bookingRef,
+			]
+		);
+
+		const { start_time, booking_ref } = booking.rows[0];
+
+		// Send email confirmation
+		const mailOptions = {
+			from: '"Buffrides Ride Service" <service@buffrides.com>',
+			to: email_id,
+			subject: "Booking Confirmation",
+			html: `
+    <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+      <h2 style="color: #4E784D;">Booking Confirmation</h2>
+      <p>Dear Customer,</p>
+      <p>Thank you for choosing Buffrides Ride Service. Your ride has been successfully booked with the following details:</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px;"><strong>Pickup Time:</strong></td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${formatDateTimeTo12Hour(
+						start_time
+					)}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px;"><strong>Pickup Location:</strong></td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${pickup_location}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px;"><strong>Destination:</strong></td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${destination}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px;"><strong>Booking Reference:</strong></td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${booking_ref}</td>
+        </tr>
+      </table>
+      <p>If you have any questions or need further assistance, please don't hesitate to contact us.</p>
+      <p>We appreciate your trust in Buffrides and look forward to serving you!</p>
+      <p style="color: #B48D44;">Best regards,<br>Buffrides Ride Service Team</p>
+    </div>
+  `,
+		};
+
+		await transporter.sendMail(mailOptions);
+
+		const mailOptionsDriver = {
+			from: '"Buffrides Ride Service" <service@buffrides.com>',
+			to: "adminservices@buffrides.com",
+			subject: "Booking Confirmation",
+			text: `A ride has been successfully booked.
+
+Details:
+Name: ${name}
+Phone Number: ${phone_number}
+Email: ${email_id}
+Start Time: ${formatDateTimeTo12Hour(start_time)}
+Pickup Location: ${pickup_location}
+Destination: ${destination}
+Booking Reference: ${booking_ref}`,
+		};
+
+		// Send email to driver
+		await transporter.sendMail(mailOptionsDriver);
+
+		res
+			.status(201)
+			.json({ message: "Booking confirmed", booking: booking.rows[0] });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: "An error occurred while booking the ride" });
+	}
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
