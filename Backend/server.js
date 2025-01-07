@@ -224,6 +224,102 @@ Booking Reference: ${booking_ref}`,
 	}
 });
 
+app.post("/api/cancel_booking", async (req, res) => {
+	const { booking_ref } = req.body;
+
+	try {
+		// Connect to the database
+		const db = await pool.connect();
+
+		// Delete the booking and get its details
+		const booking = await db.query(
+			`DELETE FROM "Bookings" WHERE booking_ref = $1 RETURNING *`,
+			[booking_ref]
+		);
+
+		if (booking.rowCount === 0) {
+			return res.status(404).json({ error: "Booking not found" });
+		}
+
+		// Extract user_id from the deleted booking
+		const { user_id, start_time, pickup_location, destination } =
+			booking.rows[0];
+
+		// Fetch user details based on user_id
+		const userResult = await db.query(
+			`SELECT name, phone_number, email_id FROM "Users" WHERE user_id = $1`,
+			[user_id]
+		);
+
+		if (userResult.rowCount === 0) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		// Extract user details
+		const { name, phone_number, email_id } = userResult.rows[0];
+
+		// Format the start_time
+		const formattedStartTime = formatDateTimeTo12Hour(start_time);
+
+		// Prepare email options
+		const mailOptionsDriver = {
+			from: '"Buffrides Ride Service" <service@buffrides.com>',
+			to: "adminservices@buffrides.com",
+			subject: "Booking Cancelled",
+			text: `A ride with the below details has been cancelled.
+
+    Details:
+    Name: ${name}
+    Phone Number: ${phone_number}
+    Email: ${email_id}
+    Start Time: ${formattedStartTime}
+    Pickup Location: ${pickup_location}
+    Destination: ${destination}
+    Booking Reference: ${booking_ref}`,
+		};
+
+		// Send email to the driver
+		await transporter.sendMail(mailOptionsDriver);
+
+		const mailOptionsUser = {
+			from: '"Buffrides Ride Service" <service@buffrides.com>',
+			to: email_id,
+			subject: "Your Booking Has Been Canceled",
+			text: `Hello ${name},
+
+        Your booking with the following details has been successfully canceled:
+        
+        - Name: ${name}
+        - Phone Number: ${phone_number}
+        - Email: ${email_id}
+        - Start Time: ${formattedStartTime}
+        - Pickup Location: ${pickup_location}
+        - Destination: ${destination}
+        - Booking Reference: ${booking_ref}
+        
+        If you have any questions or require further assistance, feel free to contact us.
+        
+        Thank you,
+        Buffrides Ride Service Team
+        service@buffrides.com`,
+		};
+
+		// Send email to the user
+		await transporter.sendMail(mailOptionsUser);
+
+		// Respond with success
+		res.status(200).json({
+			message: "Booking canceled",
+			booking: booking.rows[0],
+		});
+	} catch (error) {
+		console.error(error);
+		res
+			.status(500)
+			.json({ error: "An error occurred while canceling the booking" });
+	}
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
