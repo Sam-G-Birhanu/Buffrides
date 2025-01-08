@@ -320,6 +320,27 @@ app.post("/api/cancel_booking", async (req, res) => {
 	}
 });
 
+async function getTravelDurationInMinutes(origin, destination, apiKey) {
+	try {
+		const response = await fetch(
+			`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(
+				origin
+			)}&destinations=${encodeURIComponent(destination)}&key=${apiKey}`
+		);
+
+		if (!response.ok) {
+			throw new Error("Failed to fetch data");
+		}
+
+		const data = await response.json();
+		const travelTimeInSeconds = data.rows[0].elements[0].duration.value; // Time in seconds
+		return Math.ceil(travelTimeInSeconds / 60); // Convert to minutes and round up
+	} catch (error) {
+		console.error("Error fetching travel duration:", error.message);
+		throw new Error("Could not calculate travel duration.");
+	}
+}
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
