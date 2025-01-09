@@ -403,6 +403,38 @@ app.post("/api/retrieve_slots", async (req, res) => {
 	}
 });
 
+app.post("/api/search_booking", async (req, res) => {
+	const { booking_ref } = req.body;
+
+	if (!booking_ref) {
+		return res
+			.status(400)
+			.json({ error: "Booking reference number is required" });
+	}
+
+	try {
+		const db = await pool.connect();
+
+		const booking = await db.query(
+			`SELECT * FROM "Bookings" WHERE booking_ref = $1`,
+			[booking_ref]
+		);
+
+		if (booking.rowCount === 0) {
+			return res.status(404).json({ error: "Booking not found" });
+		}
+
+		res
+			.status(200)
+			.json({ message: "Booking found", booking: booking.rows[0] });
+	} catch (error) {
+		console.error(error);
+		res
+			.status(500)
+			.json({ error: "An error occurred while searching for the booking" });
+	}
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
