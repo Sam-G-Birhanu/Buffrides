@@ -341,6 +341,68 @@ async function getTravelDurationInMinutes(origin, destination, apiKey) {
 	}
 }
 
+app.post("/api/retrieve_slots", async (req, res) => {
+	const { day, start_time } = req.body;
+	// 	const { day, start_time} = req.query;
+
+	try {
+		// Check if the wanted time is already scheduled
+		const db = await pool.connect();
+		const existingBooking = await db.query(
+			'SELECT * FROM "Bookings" WHERE day = $1 AND start_time = $2',
+			[day, start_time]
+		);
+
+		if (existingBooking.rowCount > 0) {
+			return res.status(200).json({
+				status: "unavailable",
+				message: "Time slot is already scheduled",
+			});
+		}
+
+		// Find the previous ride on the same day
+		const previousBooking = await db.query(
+			'SELECT * FROM "Bookings" WHERE day = $1 AND start_time < $2 ORDER BY start_time DESC LIMIT 1',
+			[day, start_time]
+		);
+
+		if (previousBooking.rowCount === 0) {
+			// No previous booking, the slot is available
+			return res
+				.status(200)
+				.json({ status: "available", message: "Slot is available" });
+		}
+
+		const prevBooking = previousBooking.rows[0];
+		const prevDestination = prevBooking.destination;
+		const prevEndTime = new Date(`${day}T${prevBooking.end_time}`);
+		const requestedStartTime = new Date(`${start_time.replace(" ", "T")}`);
+
+		// Use the new function to calculate travel duration
+
+		// 		const travelDurationInMinutes = await getTravelDurationInMinutes(
+		// 			prevDestination,
+		// 			pickup_location,
+		// 			googleMapsApiKey
+		// 		);
+
+		if (requestedStartTime <= prevBooking.end_time) {
+			return res.status(200).json({
+				status: "Unavailable",
+				message: "Slot is Unavailable",
+				reason: "Overlaps with another ride",
+			});
+		} else {
+			return res
+				.status(200)
+				.json({ status: "available", message: "Slot is available" });
+		}
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: "An error occurred while retrieving slots" });
+	}
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
