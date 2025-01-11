@@ -435,6 +435,55 @@ app.post("/api/search_booking", async (req, res) => {
 	}
 });
 
+app.post("/api/send_message", async (req, res) => {
+	const { name, email_id, subject, message } = req.body;
+
+	try {
+		const mailOptions = {
+			from: '"Buffrides Ride Service" <service@buffrides.com>',
+			to: "adminservices@buffrides.com",
+			subject: subject || "New Message from Buffrides User",
+			html: `
+        <p style="font-family: Arial, sans-serif; color: #333;">
+          <strong>You have received a new message from your website:</strong>
+        </p>
+        <table style="font-family: Arial, sans-serif; border-collapse: collapse; width: 100%;">
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;"><strong>Name:</strong></td>
+            <td style="border: 1px solid #ddd; padding: 8px;">${name}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;"><strong>Email:</strong></td>
+            <td style="border: 1px solid #ddd; padding: 8px;">${email_id}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;"><strong>Subject:</strong></td>
+            <td style="border: 1px solid #ddd; padding: 8px;">${
+							subject || "No Subject Provided"
+						}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;"><strong>Message:</strong></td>
+            <td style="border: 1px solid #ddd; padding: 8px;">${message}</td>
+          </tr>
+        </table>
+        <p style="font-family: Arial, sans-serif; color: #333;">
+          Please respond to the user at <a href="mailto:${email_id}" style="color: #1a73e8;">${email_id}</a>.
+        </p>
+      `,
+		};
+
+		await transporter.sendMail(mailOptions);
+
+		res.status(200).json({ message: "Email sent successfully." });
+	} catch (error) {
+		console.error(error);
+		res
+			.status(500)
+			.json({ error: "An error occurred while sending the email." });
+	}
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
