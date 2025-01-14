@@ -26,4 +26,9 @@ Buffrides is a modern ride-hailing platform that enables users to book rides, co
 - **Third-Party Services**:
   - Google Maps API (for calculating ride durations)
 
+## Future Improvements
+- Handle more edge cases such as traffic delays, last-minute cancellations, and unforeseen driver delays.
+- Enhance driver time estimation using real-time data and machine learning models.
+- Scale the platform to accommodate a larger user base and improve performance.
+
 
